@@ -422,7 +422,7 @@ class SolanaMonitor {
           wallet_address: walletAddress,
           discovery_timestamp: new Date().toISOString(),
           discovery_source: 'DEX_activity',
-          discovery_type: 'transaction_analysis',
+          discovery_type: 'jupiter_swap',
           initial_score: 50,
           confidence: 0.5,
           status: 'pending',
