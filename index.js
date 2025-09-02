@@ -683,8 +683,228 @@ async function main() {
     process.exit(0);
   });
 
+  // Start candidate processing
+  monitor.startCandidateProcessing();
+  
   console.log('✅ Monitor service started successfully');
   console.log('🔍 Monitoring Solana transactions 24/7...');
+  console.log('⚡ Candidate wallet processing enabled');
+  // Process candidate wallets into main wallets table
+  async processCandidateWallets() {
+    try {
+      console.log('🔄 Processing candidate wallets...');
+      
+      // Get pending candidate wallets (limit to avoid overload)
+      const { data: candidates, error: fetchError } = await supabase
+        .from('candidate_wallets')
+        .select('*')
+        .eq('status', 'pending')
+        .limit(10);
+
+      if (fetchError) {
+        console.error('❌ Error fetching candidates:', fetchError);
+        return;
+      }
+
+      if (!candidates || candidates.length === 0) {
+        console.log('ℹ️ No pending candidates to process');
+        return;
+      }
+
+      console.log(`📊 Processing ${candidates.length} candidate wallets...`);
+
+      for (const candidate of candidates) {
+        await this.analyzeCandidateWallet(candidate);
+        // Add small delay to avoid overwhelming the system
+        await new Promise(resolve => setTimeout(resolve, 100));
+      }
+
+    } catch (error) {
+      console.error('❌ Error processing candidate wallets:', error);
+    }
+  }
+
+  async analyzeCandidateWallet(candidate) {
+    try {
+      const walletAddress = candidate.wallet_address;
+      console.log('🔍 Analyzing candidate:', walletAddress.substring(0, 8) + '...');
+
+      // Update status to profiling
+      await supabase
+        .from('candidate_wallets')
+        .update({ status: 'profiling' })
+        .eq('id', candidate.id);
+
+      // Get wallet's transaction history from Chainstack
+      const walletAnalysis = await this.getWalletAnalysis(walletAddress);
+      
+      if (!walletAnalysis) {
+        // Mark as rejected if we can't analyze
+        await supabase
+          .from('candidate_wallets')
+          .update({ 
+            status: 'rejected',
+            rejection_reason: 'Unable to fetch transaction history'
+          })
+          .eq('id', candidate.id);
+        return;
+      }
+
+      // Calculate wallet score based on analysis
+      const score = this.calculateWalletScore(walletAnalysis);
+      
+      // If score is good enough, promote to main wallets table
+      if (score >= 60) {
+        await this.promoteToMainWallets(candidate, walletAnalysis, score);
+        console.log('✅ Promoted wallet:', walletAddress.substring(0, 8) + '...', 'Score:', score);
+      } else {
+        // Mark as rejected
+        await supabase
+          .from('candidate_wallets')
+          .update({ 
+            status: 'rejected',
+            rejection_reason: `Score too low: ${score}`
+          })
+          .eq('id', candidate.id);
+        console.log('❌ Rejected wallet:', walletAddress.substring(0, 8) + '...', 'Score:', score);
+      }
+
+    } catch (error) {
+      console.error('❌ Error analyzing candidate wallet:', error);
+      
+      // Mark as failed
+      await supabase
+        .from('candidate_wallets')
+        .update({ 
+          status: 'rejected',
+          rejection_reason: `Analysis failed: ${error.message}`
+        })
+        .eq('id', candidate.id);
+    }
+  }
+
+  async getWalletAnalysis(walletAddress) {
+    try {
+      // Get recent transactions for this wallet from our raw_transactions table
+      const { data: transactions, error } = await supabase
+        .from('raw_transactions')
+        .select('*')
+        .contains('accounts', [walletAddress])
+        .order('created_at', { ascending: false })
+        .limit(50);
+
+      if (error) {
+        console.error('❌ Error fetching wallet transactions:', error);
+        return null;
+      }
+
+      return {
+        wallet_address: walletAddress,
+        transaction_count: transactions?.length || 0,
+        recent_transactions: transactions || [],
+        analysis_timestamp: new Date().toISOString()
+      };
+
+    } catch (error) {
+      console.error('❌ Error in getWalletAnalysis:', error);
+      return null;
+    }
+  }
+
+  calculateWalletScore(analysis) {
+    try {
+      let score = 0;
+      const { transaction_count, recent_transactions } = analysis;
+
+      // Base score from transaction volume
+      score += Math.min(transaction_count * 2, 40); // Max 40 points for volume
+
+      // Bonus for recent activity
+      const recentCount = recent_transactions.filter(tx => 
+        new Date(tx.created_at) > new Date(Date.now() - 24 * 60 * 60 * 1000)
+      ).length;
+      score += Math.min(recentCount * 5, 30); // Max 30 points for recent activity
+
+      // Bonus for consistency (transactions spread over time)
+      if (transaction_count > 5) {
+        score += 20; // Consistency bonus
+      }
+
+      // Bonus for DEX diversity (appeared in multiple DEX transactions)
+      score += 10; // Basic discovery bonus
+
+      return Math.min(Math.round(score), 100);
+
+    } catch (error) {
+      console.error('❌ Error calculating wallet score:', error);
+      return 0;
+    }
+  }
+
+  async promoteToMainWallets(candidate, analysis, score) {
+    try {
+      const walletData = {
+        wallet_address: candidate.wallet_address,
+        display_name: `Smart Wallet ${candidate.wallet_address.substring(0, 8)}...`,
+        score: score,
+        discovery_date: candidate.discovery_timestamp,
+        discovery_version: 'V2',
+        discovery_source: candidate.discovery_source,
+        discovery_confidence: candidate.confidence,
+        trade_count: analysis.transaction_count,
+        analysis_status: 'complete',
+        wallet_style: this.determineWalletStyle(analysis),
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      };
+
+      // Insert into main wallets table
+      const { error: insertError } = await supabase
+        .from('wallets')
+        .upsert(walletData, { onConflict: 'wallet_address' });
+
+      if (insertError) {
+        console.error('❌ Error promoting wallet:', insertError);
+        return;
+      }
+
+      // Mark candidate as promoted
+      await supabase
+        .from('candidate_wallets')
+        .update({ 
+          status: 'promoted',
+          profile_data: analysis
+        })
+        .eq('id', candidate.id);
+
+    } catch (error) {
+      console.error('❌ Error in promoteToMainWallets:', error);
+    }
+  }
+
+  determineWalletStyle(analysis) {
+    const { transaction_count } = analysis;
+    
+    if (transaction_count > 50) return 'defi_whale';
+    if (transaction_count > 20) return 'early_investor';
+    if (transaction_count > 10) return 'scalper';
+    return 'unknown';
+  }
+
+  // Start candidate processing interval
+  startCandidateProcessing() {
+    console.log('⚡ Starting candidate wallet processing...');
+    
+    // Process candidates every 30 seconds
+    setInterval(async () => {
+      await this.processCandidateWallets();
+    }, 30000);
+
+    // Process immediately on startup
+    setTimeout(() => {
+      this.processCandidateWallets();
+    }, 5000);
+  }
 }
 
 // Start the application
