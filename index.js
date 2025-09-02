@@ -425,7 +425,7 @@ class SolanaMonitor {
           discovery_type: 'transaction_analysis',
           initial_score: 50,
           confidence: 0.5,
-          status: 'discovered',
+          status: 'pending',
           discovery_metadata: {
             signature: signature,
             slot: contextData?.slot
