@@ -296,10 +296,10 @@ class SolanaMonitor {
     try {
       console.log('📝 Processing transaction:', signature.substring(0, 16) + '...');
       
-      // Skip raw transaction storage for now and focus on wallet discovery
-      // await this.storeRawTransaction(signature, valueData, contextData);
+      // Store raw transaction for later analysis
+      await this.storeRawTransaction(signature, valueData, contextData);
       
-      // Direct wallet discovery from logs (bypass full transaction fetch)
+      // Direct wallet discovery from logs
       await this.quickWalletDiscovery(signature, valueData, contextData);
 
     } catch (error) {
@@ -472,6 +472,36 @@ class SolanaMonitor {
       }
     } catch (error) {
       console.error('❌ Error in storeTradeData:', error);
+    }
+  }
+
+  async storeRawTransaction(signature, valueData, contextData) {
+    try {
+      const transactionData = {
+        tx_signature: signature,
+        slot: contextData?.slot,
+        block_time: Math.floor(Date.now() / 1000), // Current timestamp as fallback
+        accounts: valueData?.accounts || [],
+        logs: valueData?.logs || [],
+        processed: false,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      };
+
+      const { error } = await supabase
+        .from('raw_transactions')
+        .upsert(transactionData, {
+          onConflict: 'tx_signature'
+        });
+
+      if (error) {
+        console.error('❌ Error storing raw transaction:', error);
+      } else {
+        console.log('💾 Stored raw transaction:', signature.substring(0, 16) + '...');
+      }
+
+    } catch (error) {
+      console.error('❌ Error in storeRawTransaction:', error);
     }
   }
 
