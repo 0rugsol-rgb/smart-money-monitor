@@ -1,0 +1,36 @@
+{
+  "mcpServers": {
+    "context7": {
+      "command": "bunx",
+      "args": [
+        "-y",
+        "@upstash/context7-mcp@latest"
+      ]
+    },
+    "supabase": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@supabase/mcp-server-supabase@latest",
+        "--access-token",
+        "sbp_33df6d6c2bd4334a49dc610e4b0d561e38c9fc5a"
+      ]
+    },
+    "Stripe": {
+      "command": "npx -y @stripe/mcp --tools=all",
+      "env": {
+        "STRIPE_SECRET_KEY": ""
+      }
+    },
+    "Snyk": {
+      "command": "snyk mcp -t stdio --experimental",
+      "env": {}
+    },
+    "render": {
+      "url": "https://mcp.render.com/mcp",
+      "headers": {
+        "Authorization": "Bearer rnd_vkmczKTMphkG5k1vbokYnonjYB7X"
+      }
+    }
+  }
+}
