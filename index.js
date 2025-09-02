@@ -597,98 +597,11 @@ class SolanaMonitor {
       this.subscribeToLogs();
     }
   }
-}
 
-// ====================
-// HTTP HEALTH CHECK SERVER
-// ====================
+  // ====================
+  // STAGE 2: CANDIDATE PROCESSING
+  // ====================
 
-const http = require('http');
-
-function startHealthServer(monitor) {
-  const server = http.createServer((req, res) => {
-    if (req.url === '/health') {
-      const status = monitor.getStatus();
-      res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({
-        status: 'ok',
-        timestamp: new Date().toISOString(),
-        monitor: status
-      }));
-    } else {
-      res.writeHead(404, { 'Content-Type': 'text/plain' });
-      res.end('Not Found');
-    }
-  });
-
-  server.listen(8080, '0.0.0.0', () => {
-    console.log('🏥 Health check server listening on 0.0.0.0:8080');
-  });
-
-  return server;
-}
-
-// ====================
-// MAIN APPLICATION
-// ====================
-
-async function main() {
-  console.log('🚀 Starting Smart Money AI Monitor Service');
-  console.log('📊 Configuration:', {
-    supabaseUrl: config.supabaseUrl ? '✅ Set' : '❌ Missing',
-    supabaseKey: config.supabaseServiceKey ? '✅ Set' : '❌ Missing',
-    chainstackWss: config.chainstackWssUrl ? '✅ Set' : '❌ Missing',
-    chainstackHttp: config.chainstackHttpUrl ? '✅ Set' : '⚠️ Optional',
-  });
-
-  const monitor = new SolanaMonitor();
-  
-  // Start health check server
-  const healthServer = startHealthServer(monitor);
-  
-  // Start monitoring
-  await monitor.connect();
-
-  // Refresh tracked wallets every 5 minutes
-  setInterval(() => {
-    monitor.refreshTrackedWallets();
-  }, 5 * 60 * 1000);
-
-  // Log status every minute
-  setInterval(() => {
-    const status = monitor.getStatus();
-    console.log('📊 Monitor Status:', status);
-  }, 60 * 1000);
-
-  // Graceful shutdown
-  process.on('SIGINT', () => {
-    console.log('🛑 Shutting down monitor service...');
-    if (monitor.ws) {
-      monitor.ws.close();
-    }
-    if (healthServer) {
-      healthServer.close();
-    }
-    process.exit(0);
-  });
-
-  process.on('SIGTERM', () => {
-    console.log('🛑 Received SIGTERM, shutting down...');
-    if (monitor.ws) {
-      monitor.ws.close();
-    }
-    if (healthServer) {
-      healthServer.close();
-    }
-    process.exit(0);
-  });
-
-  // Start candidate processing
-  monitor.startCandidateProcessing();
-  
-  console.log('✅ Monitor service started successfully');
-  console.log('🔍 Monitoring Solana transactions 24/7...');
-  console.log('⚡ Candidate wallet processing enabled');
   // Process candidate wallets into main wallets table
   async processCandidateWallets() {
     try {
@@ -735,7 +648,7 @@ async function main() {
         .update({ status: 'profiling' })
         .eq('id', candidate.id);
 
-      // Get wallet's transaction history from Chainstack
+      // Get wallet's transaction history from our raw_transactions table
       const walletAnalysis = await this.getWalletAnalysis(walletAddress);
       
       if (!walletAnalysis) {
@@ -905,6 +818,157 @@ async function main() {
       this.processCandidateWallets();
     }, 5000);
   }
+}
+
+// ====================
+// HTTP HEALTH CHECK SERVER
+// ====================
+
+const http = require('http');
+
+function startHealthServer(monitor) {
+  const server = http.createServer((req, res) => {
+    if (req.url === '/health') {
+      const status = monitor.getStatus();
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({
+        status: 'ok',
+        timestamp: new Date().toISOString(),
+        monitor: status
+      }));
+    } else {
+      res.writeHead(404, { 'Content-Type': 'text/plain' });
+      res.end('Not Found');
+    }
+  });
+
+  server.listen(8080, '0.0.0.0', () => {
+    console.log('🏥 Health check server listening on 0.0.0.0:8080');
+  });
+
+  return server;
+}
+
+// ====================
+// MAIN APPLICATION
+// ====================
+
+async function main() {
+  console.log('🚀 Starting Smart Money AI Monitor Service');
+  console.log('📊 Configuration:', {
+    supabaseUrl: config.supabaseUrl ? '✅ Set' : '❌ Missing',
+    supabaseKey: config.supabaseServiceKey ? '✅ Set' : '❌ Missing',
+    chainstackWss: config.chainstackWssUrl ? '✅ Set' : '❌ Missing',
+    chainstackHttp: config.chainstackHttpUrl ? '✅ Set' : '⚠️ Optional',
+  });
+
+  const monitor = new SolanaMonitor();
+  
+  // Start health check server
+  const healthServer = startHealthServer(monitor);
+  
+  // Start monitoring
+  await monitor.connect();
+
+  // Refresh tracked wallets every 5 minutes
+  setInterval(() => {
+    monitor.refreshTrackedWallets();
+  }, 5 * 60 * 1000);
+
+  // Log status every minute
+  setInterval(() => {
+    const status = monitor.getStatus();
+    console.log('📊 Monitor Status:', status);
+  }, 60 * 1000);
+
+  // Graceful shutdown
+  process.on('SIGINT', () => {
+    console.log('🛑 Shutting down monitor service...');
+    if (monitor.ws) {
+      monitor.ws.close();
+    }
+    if (healthServer) {
+      healthServer.close();
+    }
+    process.exit(0);
+  });
+
+  process.on('SIGTERM', () => {
+    console.log('🛑 Received SIGTERM, shutting down...');
+    if (monitor.ws) {
+      monitor.ws.close();
+    }
+    if (healthServer) {
+      healthServer.close();
+    }
+    process.exit(0);
+  });
+
+  // Start candidate processing
+  monitor.startCandidateProcessing();
+  
+  console.log('✅ Monitor service started successfully');
+  console.log('🔍 Monitoring Solana transactions 24/7...');
+  console.log('⚡ Candidate wallet processing enabled');
+}
+
+// ====================
+// MAIN FUNCTION
+// ====================
+
+async function main() {
+  console.log('🚀 Starting Smart Money AI Monitor Service...');
+  
+  const monitor = new SolanaMonitor();
+  
+  // Add health check server
+  const http = require('http');
+  const healthServer = http.createServer((req, res) => {
+    if (req.url === '/health') {
+      const healthData = {
+        status: 'ok',
+        timestamp: new Date().toISOString(),
+        monitor: {
+          connected: monitor.isConnected,
+          trackedWallets: monitor.trackedWallets?.size || 0,
+          subscriptionIds: monitor.subscriptionIds || [],
+          reconnectAttempts: monitor.reconnectAttempts || 0,
+          processedTransactions: monitor.processedTransactions || 0
+        }
+      };
+      
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify(healthData, null, 2));
+    } else {
+      res.writeHead(404, { 'Content-Type': 'text/plain' });
+      res.end('Not Found');
+    }
+  });
+  
+  const port = process.env.PORT || 3000;
+  healthServer.listen(port, () => {
+    console.log(`📊 Health check server running on port ${port}`);
+  });
+
+  // Connect to Chainstack WebSocket
+  await monitor.connect();
+  
+  // Graceful shutdown
+  process.on('SIGTERM', () => {
+    console.log('⚠️ Received SIGTERM, shutting down gracefully...');
+    monitor.disconnect();
+    if (healthServer) {
+      healthServer.close();
+    }
+    process.exit(0);
+  });
+
+  // Start candidate processing
+  monitor.startCandidateProcessing();
+  
+  console.log('✅ Monitor service started successfully');
+  console.log('🔍 Monitoring Solana transactions 24/7...');
+  console.log('⚡ Candidate wallet processing enabled');
 }
 
 // Start the application
