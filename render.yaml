@@ -1,0 +1,22 @@
+services:
+  - type: web
+    name: smart-money-monitor
+    env: node
+    plan: starter
+    buildCommand: npm install --production
+    startCommand: node index.js
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: SUPABASE_URL
+        fromSecret: SUPABASE_URL
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        fromSecret: SUPABASE_SERVICE_ROLE_KEY
+      - key: CHAINSTACK_WSS_URL
+        fromSecret: CHAINSTACK_WSS_URL
+      - key: CHAINSTACK_HTTP_URL
+        fromSecret: CHAINSTACK_HTTP_URL
+      - key: CHAINSTACK_API_KEY
+        fromSecret: CHAINSTACK_API_KEY
+    region: oregon
+    healthCheckPath: /health
