@@ -697,7 +697,7 @@ class SolanaMonitor {
       const score = this.calculateWalletScore(walletAnalysis);
       
       // If score is good enough, promote to main wallets table
-      if (score >= 60) {
+      if (score >= 40) {
         await this.promoteToMainWallets(candidate, walletAnalysis, score);
         console.log('✅ Promoted wallet:', walletAddress.substring(0, 8) + '...', 'Score:', score);
       } else {
